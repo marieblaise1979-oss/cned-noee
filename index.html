@@ -30,6 +30,19 @@ button,input,select{font:inherit}.app-shell{min-height:100vh;display:grid;grid-t
 .lesson-links .lesson-open{text-align:left;width:100%;border:0;cursor:pointer}
 </style>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+
+<style id="cloud-sync-style">
+.cloud-sync{display:flex;align-items:center;gap:9px;margin-left:auto}
+.cloud-sync-status{font-size:11px;color:#64748b;max-width:180px;text-align:right;line-height:1.25}
+.cloud-auth-btn{border:1px solid #cfe4f1;background:#fff;color:#073763;border-radius:12px;padding:9px 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap}
+.cloud-auth-btn:hover{border-color:#71c3e8;background:#f4fbff}
+.cloud-auth-btn.connected{color:#166534;border-color:#b7dfc4;background:#f1fbf4}
+@media(max-width:780px){
+  .topbar{flex-wrap:wrap}
+  .cloud-sync{order:3;width:100%;justify-content:flex-end}
+  .cloud-sync-status{max-width:none}
+}
+</style>
 </head>
 <body>
   <div class="app-shell">
@@ -62,9 +75,13 @@ button,input,select{font:inherit}.app-shell{min-height:100vh;display:grid;grid-t
           <h1 id="pageTitle">Planning</h1>
         </div>
         <button class="backup-btn" id="backupBtn" title="Télécharger une sauvegarde des coches et des notes">Sauvegarder mes données</button>
+        <div class="cloud-sync" id="cloudSyncBox">
+          <span class="cloud-sync-status" id="cloudSyncStatus">Non connectée · données locales</span>
+          <button class="cloud-auth-btn" id="cloudAuthBtn" type="button">Se connecter avec Google</button>
+        </div>
       </header>
       <section id="content" class="content"></section>
-      <footer>Les données personnelles (coches et notes) restent enregistrées sur cet appareil.</footer>
+      <footer>Coches et notes : sauvegarde locale sur l’appareil + synchronisation Firebase après connexion.</footer>
     </main>
   </div>
   <input id="importFile" type="file" accept="application/json" hidden />
@@ -357,6 +374,166 @@ button,input,select{font:inherit}.app-shell{min-height:100vh;display:grid;grid-t
 
   setView('planning');
 })();
+</script>
+
+<script type="module" id="firebase-cloud-sync">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut,
+  onAuthStateChanged, setPersistence, browserLocalPersistence
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import {
+  getDatabase, ref, get, set, remove, onValue
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBEW-NDM9QijppwNMIZzwWL_41kWjh6cDo",
+  authDomain: "cned-noee.firebaseapp.com",
+  databaseURL: "https://cned-noee-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "cned-noee",
+  storageBucket: "cned-noee.firebasestorage.app",
+  messagingSenderId: "713743475352",
+  appId: "1:713743475352:web:2f8911ac55649d915726ed"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ prompt: "select_account" });
+
+const PREFIX = "cned-noee-";
+const ROOT = "cned-noee/state";
+const btn = document.getElementById("cloudAuthBtn");
+const status = document.getElementById("cloudSyncStatus");
+
+let cloudReady = false;
+let applyingRemote = false;
+let currentUser = null;
+let stopCloudListener = null;
+
+function setStatus(message, connected=false){
+  if(status) status.textContent = message;
+  if(btn) btn.classList.toggle("connected", connected);
+}
+
+function parseStored(raw){
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
+function collectLocal(){
+  const out = {};
+  for(let i=0;i<localStorage.length;i++){
+    const key = localStorage.key(i);
+    if(key && key.startsWith(PREFIX)){
+      out[key] = parseStored(localStorage.getItem(key));
+    }
+  }
+  return out;
+}
+
+const nativeSetItem = Storage.prototype.setItem;
+const nativeRemoveItem = Storage.prototype.removeItem;
+
+Storage.prototype.setItem = function(key,value){
+  nativeSetItem.call(this,key,value);
+  if(this === localStorage && cloudReady && currentUser && !applyingRemote && String(key).startsWith(PREFIX)){
+    set(ref(db, ROOT + "/" + key), parseStored(value))
+      .then(()=>setStatus("Synchronisé ✓", true))
+      .catch(()=>setStatus("Connectée · synchronisation impossible", true));
+  }
+};
+
+Storage.prototype.removeItem = function(key){
+  nativeRemoveItem.call(this,key);
+  if(this === localStorage && cloudReady && currentUser && !applyingRemote && String(key).startsWith(PREFIX)){
+    remove(ref(db, ROOT + "/" + key))
+      .then(()=>setStatus("Synchronisé ✓", true))
+      .catch(()=>setStatus("Connectée · synchronisation impossible", true));
+  }
+};
+
+function applyCloud(data){
+  const cloud = data || {};
+  let changed = false;
+  applyingRemote = true;
+  try{
+    for(const [key,val] of Object.entries(cloud)){
+      if(!key.startsWith(PREFIX)) continue;
+      const next = JSON.stringify(val);
+      if(localStorage.getItem(key) !== next){
+        nativeSetItem.call(localStorage,key,next);
+        changed = true;
+      }
+    }
+  } finally {
+    applyingRemote = false;
+  }
+  if(changed){
+    setStatus("Données reçues · actualisation…", true);
+    setTimeout(()=>location.reload(),120);
+  }
+}
+
+async function startCloud(user){
+  currentUser = user;
+  cloudReady = false;
+  if(stopCloudListener){ stopCloudListener(); stopCloudListener = null; }
+  setStatus("Connectée · vérification de la base…", true);
+  if(btn) btn.textContent = "Se déconnecter";
+
+  try{
+    const rootRef = ref(db, ROOT);
+    const snap = await get(rootRef);
+    if(snap.exists()){
+      applyCloud(snap.val());
+    }else{
+      const local = collectLocal();
+      if(Object.keys(local).length){
+        await set(rootRef, local);
+      }
+    }
+    cloudReady = true;
+    setStatus("Synchronisé ✓", true);
+    stopCloudListener = onValue(rootRef, s=>{
+      if(!cloudReady) return;
+      applyCloud(s.val() || {});
+    }, ()=>{
+      cloudReady = false;
+      setStatus("Connectée · accès à la base refusé", true);
+    });
+  }catch(err){
+    cloudReady = false;
+    setStatus("Connectée · base encore verrouillée", true);
+  }
+}
+
+await setPersistence(auth, browserLocalPersistence);
+
+btn?.addEventListener("click", async ()=>{
+  try{
+    if(auth.currentUser){
+      await signOut(auth);
+    }else{
+      await signInWithPopup(auth, provider);
+    }
+  }catch(err){
+    console.error(err);
+    setStatus("Connexion Google annulée ou impossible");
+  }
+});
+
+onAuthStateChanged(auth, user=>{
+  if(user){
+    startCloud(user);
+  }else{
+    currentUser = null;
+    cloudReady = false;
+    if(stopCloudListener){ stopCloudListener(); stopCloudListener = null; }
+    if(btn){ btn.textContent = "Se connecter avec Google"; btn.classList.remove("connected"); }
+    setStatus("Non connectée · données locales");
+  }
+});
 </script>
 </body>
 </html>
