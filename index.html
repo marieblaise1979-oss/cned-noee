@@ -519,7 +519,18 @@ btn?.addEventListener("click", async ()=>{
     }
   }catch(err){
     console.error(err);
-    setStatus("Connexion Google annulée ou impossible");
+    const code = err?.code || "erreur-inconnue";
+    const messages = {
+      "auth/operation-not-allowed": "Google n’est pas activé dans Firebase",
+      "auth/unauthorized-domain": "Domaine GitHub non autorisé dans Firebase",
+      "auth/popup-blocked": "Fenêtre Google bloquée par le navigateur",
+      "auth/popup-closed-by-user": "Fenêtre Google fermée avant la fin",
+      "auth/cancelled-popup-request": "Une autre tentative de connexion est déjà en cours",
+      "auth/network-request-failed": "Erreur réseau pendant la connexion"
+    };
+    const detail = messages[code] || code;
+    setStatus("Erreur : " + detail);
+    alert("Connexion Firebase impossible\n\n" + detail + "\n\nCode : " + code);
   }
 });
 
