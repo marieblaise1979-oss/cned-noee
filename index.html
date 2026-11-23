@@ -206,6 +206,7 @@ button,input,select{font:inherit}.app-shell{min-height:100vh;display:grid;grid-t
   };
 
   const courses = {
+    francais:{status:'active',line:'Unité 4 · Les Fourberies de Scapin',archiveTitle:'Unité 3 · Mythes'},
     anglais:{status:'active',line:'Unité 3 · Fairy tales',archiveTitle:'Unité 2 · Pioneers'},
     espagnol:{status:'active',line:'Unité 2 · ¿Quién eres?',archiveTitle:'Unité 1 · Primeros pasos'}
   };
@@ -323,7 +324,9 @@ button,input,select{font:inherit}.app-shell{min-height:100vh;display:grid;grid-t
     selectedSubject=key;const s=subjects.find(x=>x.key===key),c=courses[key];title.textContent=s.name;
     let body='';
     const list=embeddedCourses[key]||[];
-    if(c && list.length){
+    if(key==='francais'){
+      body="<div class=\"course-actions\"><button class=\"soft-btn\" id=\"backSubjects\">← Toutes les matières</button></div><p style=\"color:var(--muted);font-size:13px;margin:10px 0\">8 séances illustrées, cartes mémoire, 24 questions de quiz et une préparation au devoir. Progression conservée sur cet appareil.</p><div class=\"lesson-links\"><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#intro\" target=\"_blank\" rel=\"noopener\">🎭 Découvrir les personnages ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s1\" target=\"_blank\" rel=\"noopener\">Séance 1 · Père et fils · les retrouvailles ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s2\" target=\"_blank\" rel=\"noopener\">Séance 2 · À la rencontre de Scapin ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s3\" target=\"_blank\" rel=\"noopener\">Séance 3 · Scapin metteur en scène ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s4\" target=\"_blank\" rel=\"noopener\">Séance 4 · Scapin et ses maîtres ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s5\" target=\"_blank\" rel=\"noopener\">Séance 5 · Argante le crédule ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s6\" target=\"_blank\" rel=\"noopener\">Séance 6 · Ordonner au subjonctif ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s7\" target=\"_blank\" rel=\"noopener\">Séance 7 · Le valet rusé est démasqué ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#s8\" target=\"_blank\" rel=\"noopener\">Séance 8 · Qui a le dernier mot ? ↗</a><a class=\"primary-btn lesson-open\" href=\"./francais-u4-scapin.html#devoir\" target=\"_blank\" rel=\"noopener\">📝 Préparer le devoir 4 ↗</a></div>";
+    } else if(c && list.length){
       body=`<div class="course-actions"><button class="soft-btn" id="backSubjects">← Toutes les matières</button></div>
       <div class="lesson-links">${list.map((l,i)=>`<button class="primary-btn lesson-open" data-open-course="${i}">${esc(l.title)} ↗</button>`).join('')}</div>
       <details class="archive-unit"><summary>Unités terminées · archives</summary><p>${esc(c.archiveTitle)} — conservée comme unité acquise. Les anciens cours pourront être réaffichés si nécessaire.</p></details>`;
